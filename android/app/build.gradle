@@ -85,6 +85,7 @@ if (runTimeConfig.exists()) {
   config.deepLink = runTime.deepLink ?: ''
   config.universalLink = runTime.universalLink ?: ''
   config.permissions = runTime.permissions ?: [:]
+  config.kiosk = runTime.kiosk ?: [:]
 }
 
 println "Runtime Configuration"
@@ -154,6 +155,10 @@ android {
         manifestPlaceholders["displayName"] = config.displayName
         manifestPlaceholders["deepLink"] = config.deepLink
         manifestPlaceholders["universalLink"] = config.universalLink
+
+        // Kiosk mode, applied in MainActivity
+        buildConfigField "boolean", "KIOSK_FULL_SCREEN", String.valueOf(config.kiosk?.fullScreen == true)
+        buildConfigField "boolean", "KIOSK_KEEP_AWAKE", String.valueOf(config.kiosk?.keepAwake == true)
 
         applicationId config.id
         minSdkVersion rootProject.ext.minSdkVersion

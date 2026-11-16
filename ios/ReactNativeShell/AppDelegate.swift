@@ -32,9 +32,22 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       launchOptions: launchOptions
     )
 
+    applyKioskMode(application)
+
     return true
   }
-  
+
+  // The idle timer may be re-enabled by the system while in background
+  func applicationDidBecomeActive(_ application: UIApplication) {
+    applyKioskMode(application)
+  }
+
+  private func applyKioskMode(_ application: UIApplication) {
+    if Kiosk.keepAwake {
+      application.isIdleTimerDisabled = true
+    }
+  }
+
   
   func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey : Any] = [:]) -> Bool {
     return RCTLinkingManager.application(app, open: url, options: options)
@@ -71,4 +84,22 @@ class ReactNativeDelegate: RCTDefaultReactNativeFactoryDelegate {
     super.customize(rootView)
     RNBootSplash.initWithStoryboard("BootSplash", rootView: rootView)
   }
+
+  override func createRootViewController() -> UIViewController {
+    Kiosk.fullScreen ? KioskViewController() : super.createRootViewController()
+  }
+}
+
+/// Kiosk mode flags, written into Info.plist by scripts/generateKiosk.js
+enum Kiosk {
+  static let fullScreen = Bundle.main.object(forInfoDictionaryKey: "RNShellFullScreen") as? Bool ?? false
+  static let keepAwake = Bundle.main.object(forInfoDictionaryKey: "RNShellKeepAwake") as? Bool ?? false
+}
+
+/// Root view controller for full screen kiosk mode: hides the status bar and home
+/// indicator, and makes edge swipes require a second swipe to open system UI.
+class KioskViewController: UIViewController {
+  override var prefersStatusBarHidden: Bool { true }
+  override var prefersHomeIndicatorAutoHidden: Bool { true }
+  override var preferredScreenEdgesDeferringSystemGestures: UIRectEdge { .all }
 }

@@ -43,6 +43,16 @@ const buildConfig = {
   universalLink: options.universalLink,
 
   permissions: options.permissions,
+
+  kiosk: normalizeKiosk(options.kiosk),
+}
+
+// `kiosk: true` enables everything, an object can opt out of individual features
+function normalizeKiosk(kiosk) {
+  if (!kiosk) return undefined;
+  const defaults = { fullScreen: true, keepAwake: true };
+  if (kiosk === true) return defaults;
+  return Object.assign(defaults, kiosk);
 }
 
 // Configuration Override
