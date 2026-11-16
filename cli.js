@@ -41,6 +41,8 @@ const buildConfig = {
 
   deepLink: options.deepLink,
   universalLink: options.universalLink,
+
+  permissions: options.permissions,
 }
 
 // Configuration Override

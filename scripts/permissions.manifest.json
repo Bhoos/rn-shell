@@ -1,0 +1,29 @@
+{
+  "camera": {
+    "ios": "NSCameraUsageDescription",
+    "android": "android.permission.CAMERA"
+  },
+  "microphone": {
+    "ios": "NSMicrophoneUsageDescription",
+    "android": "android.permission.RECORD_AUDIO"
+  },
+  "photoLibrary": {
+    "ios": "NSPhotoLibraryUsageDescription",
+    "android": "android.permission.READ_MEDIA_IMAGES"
+  },
+  "location": {
+    "ios": "NSLocationWhenInUseUsageDescription",
+    "android": ["android.permission.ACCESS_FINE_LOCATION", "android.permission.ACCESS_COARSE_LOCATION"]
+  },
+  "contacts": {
+    "ios": "NSContactsUsageDescription",
+    "android": "android.permission.READ_CONTACTS"
+  },
+  "bluetooth": {
+    "ios": "NSBluetoothAlwaysUsageDescription",
+    "android": ["android.permission.BLUETOOTH_SCAN", "android.permission.BLUETOOTH_CONNECT"]
+  },
+  "notifications": {
+    "android": "android.permission.POST_NOTIFICATIONS"
+  }
+}
