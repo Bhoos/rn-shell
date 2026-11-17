@@ -26,7 +26,6 @@ const config = {
   resolver: {
     ...defaultConfig.resolver,
     resolveRequest: (context, moduleName, platform) => {
-      console.log('Resolve request', platform, moduleName);
       if (moduleName === "./index") {
         if (!fs.existsSync(path.join(applicationRoot, 'index.js'))) {
           return {

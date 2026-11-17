@@ -33,14 +33,14 @@ export function ShellApp() {
       BootSplash.hide({ fade: true });
     });
 
-    Linking.addEventListener('url', (res) => {
+    const subscription = Linking.addEventListener('url', (res) => {
       console.log('got link event', res.url);
       const parsed = parseUrl(res.url);
       if (parsed) setPath(parsed);
     });
 
     return () => {
-      Linking.removeAllListeners('url');
+      subscription.remove();
     }
   }, []);
 

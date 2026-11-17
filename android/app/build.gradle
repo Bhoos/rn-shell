@@ -83,7 +83,9 @@ if (runTimeConfig.exists()) {
   config.marketingVersion = runTime.version ?: config.marketingVersion
   config.buildNumber = runTime.buildNumber ?: config.buildNumber
   config.deepLink = runTime.deepLink ?: ''
-  config.universalLink = runTime.universalLink ?: ''
+  // universalLink is either the domain or an object { domain, paths }
+  def universalLink = runTime.universalLink
+  config.universalLink = (universalLink instanceof Map ? universalLink.domain : universalLink) ?: ''
   config.permissions = runTime.permissions ?: [:]
   config.kiosk = runTime.kiosk ?: [:]
 }

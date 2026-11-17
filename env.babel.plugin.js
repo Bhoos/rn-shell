@@ -34,7 +34,7 @@ module.exports = function (options) {
     name: "custom-env-json-plugin",
     visitor: {
       MemberExpression: function MemberExpression(path, state) {
-        if (t.isAssignmentExpression(path.parent) && path.parent.left == path.mode) return;
+        if (t.isAssignmentExpression(path.parent) && path.parent.left === path.node) return;
         if (path.get("object").matchesPattern("process.env")) {
           const key = path.toComputedKey();
           if (t.isStringLiteral(key)) {

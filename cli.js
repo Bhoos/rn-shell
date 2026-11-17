@@ -17,6 +17,10 @@ const toSnakeCase = str => {
 // Create a run time config from the current working directory
 const pkg = JSON.parse(fs.readFileSync(path.resolve('./package.json')));
 const options = pkg["rn-shell"];
+if (!options) {
+  console.error('Missing "rn-shell" configuration in package.json (requires at least "name" and "id")');
+  process.exit(1);
+}
 
 const buildConfig = {
   name: pkg.name,
@@ -30,7 +34,7 @@ const buildConfig = {
   id: options.id,
   buildNumber: options.buildNumber || 1,
 
-  appIcon: path.resolve(process.cwd(), options.appIcon),
+  appIcon: options.appIcon && path.resolve(process.cwd(), options.appIcon),
 
   splashIconSize: options.splashIconSize,
   splashIcon: options.splashIcon,
@@ -66,17 +70,19 @@ if (config) {
 const srcAssetsFolder = path.resolve('assets');
 const destAssetsFolder = path.resolve(__dirname, "assets");
 
-const srcAssets = fs.lstatSync(srcAssetsFolder);
-if (srcAssets.isDirectory()) {
-  // remove everything from the directoy first
-  if (fs.existsSync(destAssetsFolder)) {
-    const items = fs.readdirSync(destAssetsFolder);
-    items.forEach(item => {
-      if (item.startsWith(".")) return;
-      fs.rmSync(path.join(destAssetsFolder, item), { recursive: true, force: true });
-    });
-  }
+// Remove the assets of any previously run application first
+if (fs.existsSync(destAssetsFolder)) {
+  const items = fs.readdirSync(destAssetsFolder);
+  items.forEach(item => {
+    if (item.startsWith(".")) return;
+    fs.rmSync(path.join(destAssetsFolder, item), { recursive: true, force: true });
+  });
+} else {
+  fs.mkdirSync(destAssetsFolder);
+}
 
+// The assets folder is optional for an application
+if (fs.existsSync(srcAssetsFolder) && fs.statSync(srcAssetsFolder).isDirectory()) {
   const files = fs.readdirSync(srcAssetsFolder);
   files.forEach((file) => {
     // Ignore all hidden files
@@ -102,7 +108,8 @@ ENV_APP_BUILD_VERSION=${buildConfig.buildNumber}
 
 // Create symbolic link to assets folder for android
 const androidAssets = path.resolve('android/app/src/main/assets');
-if (fs.existsSync(androidAssets)) {
+// lstat instead of exists, so that a dangling symlink is removed as well
+if (fs.lstatSync(androidAssets, { throwIfNoEntry: false })) {
   console.log('Remove existing android assets');
   // Remove existing folder (rm -rf ...)
   fs.rmSync(androidAssets, { recursive: true, force: true });
@@ -151,7 +158,7 @@ if (config.universalLink) {
       apps: [],
       details: [{
         appIDs: [`${config.appleTeam}.${config.id}`],
-        paths: [info.paths ? info.paths : "*"],
+        paths: info.paths || ["*"],
         components: info.paths ? info.paths.map(p => {
           if (p.startsWith("NOT")) {
             return {
@@ -199,7 +206,7 @@ if (config.universalLink) {
 
 
 // In case of a run-android command override the appId
-const cmd = process.argv[2];
+const cmd = process.argv[2] || '';
 if (cmd.includes('android')) {
   process.argv.push('--appId');
   process.argv.push(buildConfig.id);
