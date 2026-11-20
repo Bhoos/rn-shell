@@ -48,6 +48,9 @@ const buildConfig = {
 
   permissions: options.permissions,
 
+  // App Attest (iOS): "development" or "production", the entitlement's environment
+  appAttest: options.appAttest,
+
   kiosk: normalizeKiosk(options.kiosk),
 }
 
@@ -104,7 +107,7 @@ ENV_APP_DISPLAY_NAME=${buildConfig.displayName}
 ENV_APP_MODULE_NAME=${buildConfig.moduleName}
 ENV_APP_MARKETING_VERSION=${buildConfig.version}
 ENV_APP_BUILD_VERSION=${buildConfig.buildNumber}
-`);
+${buildConfig.appleTeam ? `// Signing (the app's "appleTeam")\nDEVELOPMENT_TEAM=${buildConfig.appleTeam}\n` : ''}`);
 
 // Create symbolic link to assets folder for android
 const androidAssets = path.resolve('android/app/src/main/assets');
@@ -116,6 +119,29 @@ if (fs.lstatSync(androidAssets, { throwIfNoEntry: false })) {
 }
 fs.symlinkSync(destAssetsFolder, androidAssets);
 
+
+// The app's iOS entitlements: universal links (associated domains) and App Attest
+{
+  const entries = [];
+  if (buildConfig.universalLink) {
+    const domain = typeof buildConfig.universalLink === 'string' ? buildConfig.universalLink : buildConfig.universalLink.domain;
+    entries.push(`\t<key>com.apple.developer.associated-domains</key>\n\t<array>\n\t\t<string>applinks:${domain}</string>\n\t</array>`);
+  }
+  if (buildConfig.appAttest) {
+    if (!['development', 'production'].includes(buildConfig.appAttest)) {
+      throw new Error(`"appAttest" is "development" or "production", not "${buildConfig.appAttest}"`);
+    }
+    entries.push(`\t<key>com.apple.developer.devicecheck.appattest-environment</key>\n\t<string>${buildConfig.appAttest}</string>`);
+  }
+  fs.writeFileSync('ios/ReactNativeShell/ReactNativeShell.entitlements', `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+${entries.join('\n')}
+</dict>
+</plist>
+`);
+}
 
 // Generate runtime config file to be used within build scripts
 fs.writeFileSync('.runtime.config.json', JSON.stringify(buildConfig, undefined, 2));

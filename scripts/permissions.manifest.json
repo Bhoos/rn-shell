@@ -13,7 +13,10 @@
   },
   "location": {
     "ios": "NSLocationWhenInUseUsageDescription",
-    "android": ["android.permission.ACCESS_FINE_LOCATION", "android.permission.ACCESS_COARSE_LOCATION"]
+    "android": [
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.ACCESS_COARSE_LOCATION"
+    ]
   },
   "contacts": {
     "ios": "NSContactsUsageDescription",
@@ -21,9 +24,15 @@
   },
   "bluetooth": {
     "ios": "NSBluetoothAlwaysUsageDescription",
-    "android": ["android.permission.BLUETOOTH_SCAN", "android.permission.BLUETOOTH_CONNECT"]
+    "android": [
+      "android.permission.BLUETOOTH_SCAN",
+      "android.permission.BLUETOOTH_CONNECT"
+    ]
   },
   "notifications": {
     "android": "android.permission.POST_NOTIFICATIONS"
+  },
+  "localNetwork": {
+    "ios": "NSLocalNetworkUsageDescription"
   }
 }
