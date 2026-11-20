@@ -15,6 +15,10 @@ const shellRoot = __dirname;
 const workspaceRoot = runTimeConfig.workspaceRoot;
 const applicationRoot = runTimeConfig.directory;
 
+/** One copy of these for every module, the shell's: a workspace package may bring its own. */
+const PINNED = /^(react|react-native)(\/|$)/;
+const shellOrigin = path.resolve(shellRoot, 'index.js');
+
 const config = {
   ...defaultConfig,
 
@@ -35,7 +39,18 @@ const config = {
         }
       }
       // console.log('Resolve Request', moduleName, platform);
-      return context.resolveRequest(context, moduleName, platform);
+      if (PINNED.test(moduleName)) {
+        return context.resolveRequest({ ...context, originModulePath: shellOrigin }, moduleName, platform);
+      }
+      try {
+        return context.resolveRequest(context, moduleName, platform);
+      } catch (err) {
+        // In a workspace that doesn't hoist (pnpm's default), a package's own
+        // dependencies are in its own node_modules: look them up from the
+        // importing file, as Node does
+        if (!workspaceRoot) throw err;
+        return context.resolveRequest({ ...context, disableHierarchicalLookup: false }, moduleName, platform);
+      }
     },
     disableHierarchicalLookup: true,
     nodeModulesPaths: [
