@@ -1,0 +1,50 @@
+buildscript {
+    ext.CrsqliteDefaults = [
+        kotlinVersion: '1.9.24',
+        minSdkVersion: 21,
+        compileSdkVersion: 36,
+        agpVersion: '7.4.2'
+    ]
+
+    ext.getExtOrDefault = { prop ->
+        if (rootProject.ext.has(prop)) {
+            return rootProject.ext.get(prop)
+        }
+
+        return CrsqliteDefaults[prop]
+    }
+
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath("com.android.tools.build:gradle:${getExtOrDefault('agpVersion')}")
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:${getExtOrDefault('kotlinVersion')}"
+    }
+}
+
+println "🔥 [CRSQLITE] Building"
+
+apply plugin: 'com.android.library'
+apply plugin: 'org.jetbrains.kotlin.android'
+
+android {
+    namespace "com.bhoos.crsqlitenative"
+    compileSdkVersion getExtOrDefault('compileSdkVersion')
+
+    defaultConfig {
+        minSdkVersion getExtOrDefault('minSdkVersion')
+    }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs += ['src/main/jniLibs']
+        }
+    }
+}
+
+dependencies {
+    compileOnly "com.facebook.react:react-android:+"
+}
