@@ -1,0 +1,17 @@
+{
+  "name": "rn-shell-secure-keys",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Keys the platform holds (iOS Secure Enclave or keychain, Android Keystore: never exported), signing and ECDH with them, and app attestation (App Attest, Play Integrity)",
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "source": "src/index.ts",
+  "codegenConfig": {
+    "name": "RNShellSecureKeysSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.reactnativeshell.securekeys"
+    }
+  }
+}

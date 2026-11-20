@@ -13,7 +13,8 @@
     "react-native-keychain": "^11.0.0",
     "react-native-nitro-modules": "0.37.2",
     "react-native-quick-base64": "^3.0.2",
-    "react-native-quick-crypto": "1.1.10"
+    "react-native-quick-crypto": "1.1.10",
+    "rn-shell-secure-keys": "file:./native/secure-keys"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
