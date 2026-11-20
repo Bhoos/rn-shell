@@ -1,0 +1,43 @@
+buildscript {
+  repositories {
+    google()
+    mavenCentral()
+  }
+}
+
+def safeExtGet(prop, fallback) {
+  return rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
+}
+
+apply plugin: 'com.android.library'
+// AGP 9 provides Kotlin itself; older AGP versions still need the plugin.
+if (project.extensions.findByName('kotlin') == null) {
+  apply plugin: 'kotlin-android'
+}
+apply plugin: 'com.facebook.react'
+
+android {
+  namespace = "com.reactnativeshell.securekeys"
+  compileSdkVersion safeExtGet('compileSdkVersion', 36)
+
+  defaultConfig {
+    minSdkVersion safeExtGet('minSdkVersion', 24)
+    targetSdkVersion safeExtGet('targetSdkVersion', 36)
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+}
+
+repositories {
+  mavenCentral()
+  google()
+}
+
+dependencies {
+  implementation 'com.facebook.react:react-android'
+  // Play Integrity: the app's attestation
+  implementation 'com.google.android.play:integrity:1.4.0'
+}
