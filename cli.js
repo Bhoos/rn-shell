@@ -55,6 +55,9 @@ const buildConfig = {
 
   // Over the air updates (scripts/updates.js): { url, publicKey, out?, runtimeVersion? }
   updates: options.updates,
+
+  // Plugins (scripts/updates.js, native/updates): { name: entry file, relative to the app }
+  plugins: options.plugins,
 }
 
 // The builds an update can run on, per platform (scripts/updates.js)

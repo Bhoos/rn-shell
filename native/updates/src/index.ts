@@ -39,3 +39,5 @@ export async function check(): Promise<CheckResult> {
 export function ready(): void {
   Native?.ready();
 }
+
+export { configurePlugins, loadPlugin, pluginIndex, pluginNames, type PluginBuild, type PluginIndex } from './plugins';

@@ -278,6 +278,79 @@ static NSError *Failure(NSString *message) {
   return @{@"status" : @"downloaded", @"id" : updateId, @"embedded" : @(embedded), @"message" : message};
 }
 
+#pragma mark - Plugins
+
+- (NSString *)pluginsDir {
+  return [_root stringByAppendingPathComponent:@"plugins"];
+}
+
+/** A signed index's manifest (text), if it's the publisher's and for this build. */
+- (nullable NSString *)pluginManifest:(NSData *)data identifier:(long long *)identifier {
+  NSDictionary *outer = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+  NSString *text = [outer isKindOfClass:NSDictionary.class] ? outer[@"manifest"] : nil;
+  NSString *signature = [outer isKindOfClass:NSDictionary.class] ? outer[@"signature"] : nil;
+  if (![text isKindOfClass:NSString.class] || ![signature isKindOfClass:NSString.class]) return nil;
+  NSData *signatureData = [[NSData alloc] initWithBase64EncodedString:signature options:0];
+  NSData *manifestData = [text dataUsingEncoding:NSUTF8StringEncoding];
+  if (!signatureData || ![self verify:manifestData signature:signatureData]) return nil;
+  NSDictionary *manifest = [NSJSONSerialization JSONObjectWithData:manifestData options:0 error:nil];
+  if (![manifest isKindOfClass:NSDictionary.class] || ![manifest[@"platform"] isEqual:kPlatform] ||
+      ![manifest[@"runtimeVersion"] isEqual:_runtimeVersion]) {
+    return nil;
+  }
+  if (identifier) *identifier = [manifest[@"id"] longLongValue];
+  return text;
+}
+
+- (NSString *)pluginIndex:(NSError **)error {
+  if (!self.enabled) return nil;
+  @synchronized(self) { (void)self.state; }
+  NSString *savedPath = [_root stringByAppendingPathComponent:@"plugins.json"];
+  long long savedId = -1, fetchedId = -1;
+  NSString *saved = [self pluginManifest:[NSData dataWithContentsOfFile:savedPath] identifier:&savedId];
+  NSInteger status = 0;
+  NSError *offline = nil;
+  NSString *url = [NSString stringWithFormat:@"%@/%@/plugins.json", kPlatform, _runtimeVersion];
+  NSData *fetched = [self get:[NSURL URLWithString:url relativeToURL:_baseURL] status:&status error:&offline];
+  if (fetched) {
+    NSString *manifest = [self pluginManifest:fetched identifier:&fetchedId];
+    if (!manifest) {
+      if (error) *error = Failure(@"The plugin index's signature doesn't match the app's key");
+      return nil;
+    }
+    if (fetchedId > savedId) {
+      [NSFileManager.defaultManager createDirectoryAtPath:_root withIntermediateDirectories:YES attributes:nil error:nil];
+      [fetched writeToFile:savedPath options:NSDataWritingAtomic error:nil];
+      return manifest;
+    }
+  }
+  // Offline, or nothing newer: the saved one
+  return saved;
+}
+
+- (BOOL)fetchPlugin:(NSString *)hash error:(NSError **)error {
+  if (!self.enabled) {
+    if (error) *error = Failure(@"Plugins load from the development server in debug builds");
+    return NO;
+  }
+  if (hash.length != 64 || [hash rangeOfCharacterFromSet:[[NSCharacterSet characterSetWithCharactersInString:@"0123456789abcdef"] invertedSet]].location != NSNotFound) {
+    if (error) *error = Failure([@"Not a plugin's hash: " stringByAppendingString:hash]);
+    return NO;
+  }
+  @synchronized(self) { (void)self.state; }
+  NSFileManager *fm = NSFileManager.defaultManager;
+  NSString *file = [self.pluginsDir stringByAppendingPathComponent:hash];
+  if ([fm fileExistsAtPath:file]) return YES;
+  NSInteger status = 0;
+  NSData *content = [self get:[NSURL URLWithString:[@"files/" stringByAppendingString:hash] relativeToURL:_baseURL] status:&status error:error];
+  if (!content || ![Sha256(content) isEqualToString:hash]) {
+    if (error && !*error) *error = Failure([NSString stringWithFormat:@"The plugin %@ didn't download", hash]);
+    return NO;
+  }
+  [fm createDirectoryAtPath:self.pluginsDir withIntermediateDirectories:YES attributes:nil error:nil];
+  return [content writeToFile:file options:NSDataWritingAtomic error:error];
+}
+
 /** A path inside the update's directory: relative, without "..". */
 static BOOL SafePath(NSString *path) {
   if (path.length == 0 || [path hasPrefix:@"/"] || [path containsString:@"\\"]) return NO;

@@ -23,6 +23,28 @@ android {
   defaultConfig {
     minSdkVersion safeExtGet('minSdkVersion', 24)
     targetSdkVersion safeExtGet('targetSdkVersion', 36)
+    externalNativeBuild {
+      cmake {
+        arguments "-DANDROID_STL=c++_shared"
+      }
+    }
+  }
+
+  // The plugin loader (C++, ../cpp): JSI bindings of the module
+  ndkVersion safeExtGet('ndkVersion', null)
+  externalNativeBuild {
+    cmake {
+      path "CMakeLists.txt"
+    }
+  }
+  buildFeatures {
+    prefab true
+  }
+  packaging {
+    jniLibs {
+      // React Native's own, packaged by the app
+      excludes += ["**/libreactnative.so", "**/libjsi.so", "**/libfbjni.so", "**/libc++_shared.so"]
+    }
   }
 
   compileOptions {

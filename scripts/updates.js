@@ -28,6 +28,9 @@
  * native modules, the iOS or Android project), so a JS update never reaches a
  * build whose native side it doesn't match.
  *
+ * Plugins (the app's "plugins": { name: entry }) are built too, against the app's
+ * modules, into <platform>/<runtimeVersion>/plugins.json (see publishPlugins).
+ *
  * The private key: --key, RN_SHELL_UPDATES_KEY, or ~/.rn-shell/updates/<id>.pem.
  */
 const fs = require('fs');
@@ -151,31 +154,52 @@ function keygen(config, args) {
   console.log(`"updates": { "publicKey": "${publicKey.export({ type: 'spki', format: 'der' }).toString('base64')}" }`);
 }
 
-/** The bundle and assets a release build would have (Hermes bytecode), in `dir`. */
-function bundle(platform, dir) {
-  const source = path.join(dir, 'bundle.js');
-  const assets = path.join(dir, 'assets');
+/** Metro's bundle of `entry` as a release build makes it (env: the serializer's, scripts/plugins/serializer.js). */
+function metroBundle(platform, entry, output, assets, env = {}, resetCache = false) {
   fs.mkdirSync(assets, { recursive: true });
-  console.log(`Bundling for ${platform}`);
   execFileSync(process.execPath, [
     path.join(shellRoot, 'node_modules', 'react-native', 'cli.js'), 'bundle',
-    '--entry-file', path.join(shellRoot, 'index.js'),
+    '--entry-file', entry,
     '--platform', platform,
     '--dev', 'false',
     '--minify', 'false', // Hermes doesn't need it
-    '--reset-cache',
-    '--bundle-output', source,
+    ...(resetCache ? ['--reset-cache'] : []),
+    '--bundle-output', output,
     '--assets-dest', assets,
-  ], { cwd: shellRoot, stdio: 'inherit' });
+  ], { cwd: shellRoot, stdio: ['ignore', 'ignore', 'inherit'], env: { ...process.env, ...env } });
+}
 
-  // The compiler the build uses: the iOS pods' (it matches their Hermes), else the npm one
+/** Hermes bytecode of `source`, with the compiler the build uses: the iOS pods' (it matches their Hermes), else the npm one. */
+function hermes(platform, source, output) {
   const podsHermesc = path.join(shellRoot, 'ios', 'Pods', 'hermes-engine', 'destroot', 'bin', 'hermesc');
   const os_ = { darwin: 'osx-bin', linux: 'linux64-bin', win32: 'win64-bin' }[process.platform];
   const npmHermesc = path.join(path.dirname(require.resolve('hermes-compiler/package.json', { paths: [path.join(shellRoot, 'node_modules', 'react-native')] })), 'hermesc', os_, 'hermesc');
   const hermesc = platform === 'ios' && fs.existsSync(podsHermesc) ? podsHermesc : npmHermesc;
-  const output = path.join(dir, BUNDLE_NAMES[platform]);
   execFileSync(hermesc, ['-emit-binary', '-max-diagnostic-width=80', '-O', '-w', '-out', output, source], { stdio: 'inherit' });
-  return { bundle: output, assets };
+  return output;
+}
+
+/** The app's bundle and assets as a release build has them (Hermes bytecode), in `dir`; `modules`: its module map. */
+function bundle(platform, dir) {
+  const source = path.join(dir, 'bundle.js');
+  const assets = path.join(dir, 'assets');
+  const modules = path.join(dir, 'modules.json');
+  console.log(`Bundling for ${platform}`);
+  metroBundle(platform, path.join(shellRoot, 'index.js'), source, assets, { RN_SHELL_MODULES_OUT: modules }, true);
+  return { bundle: hermes(platform, source, path.join(dir, BUNDLE_NAMES[platform])), assets, modules };
+}
+
+/** A plugin's bundle, built against the app's modules (`hostModules`, a file): its file and what it needs. */
+function bundlePlugin(config, platform, name, dir, hostModules) {
+  const entry = path.resolve(config.directory, config.plugins[name]);
+  const source = path.join(dir, `${name}.js`);
+  const meta = path.join(dir, `${name}.json`);
+  console.log(`Bundling the ${name} plugin for ${platform}`);
+  metroBundle(platform, entry, source, path.join(dir, `${name}-assets`), { RN_SHELL_PLUGIN_HOST: hostModules, RN_SHELL_PLUGIN_OUT: meta });
+  if (listFiles(path.join(dir, `${name}-assets`)).length) {
+    console.warn(`  ${name}: its images aren't published (a plugin's assets resolve beside the app's bundle): put them in the app, or use URLs`);
+  }
+  return { bundle: hermes(platform, source, path.join(dir, `${name}.hbc`)), ...JSON.parse(fs.readFileSync(meta)) };
 }
 
 function saveFile(out, content) {
@@ -219,6 +243,47 @@ function loadKey(config, args) {
   return crypto.createPrivateKey(fs.readFileSync(file));
 }
 
+/** How many builds of a plugin the index keeps: a phone takes the newest its app's modules fit. */
+const PLUGIN_BUILDS = 5;
+
+/** The plugins index of a platform's runtime version: { manifest, signature } or null. */
+function readPluginIndex(out, platform, runtimeVersion) {
+  const file = path.join(out, platform, runtimeVersion, 'plugins.json');
+  return fs.existsSync(file) ? JSON.parse(JSON.parse(fs.readFileSync(file)).manifest) : null;
+}
+
+/**
+ * Builds the app's plugins (all, or --plugin a,b) against its modules and
+ * adds each new build to <platform>/<runtimeVersion>/plugins.json, signed:
+ * { app, platform, runtimeVersion, id, plugins: { name: [build, newest first] } },
+ * a build { id, createdAt, bundle: <sha256>, entry, modules: { id: hash }, bundled: [ids] }.
+ */
+function publishPlugins(config, args, out, platform, runtimeVersion, dir, hostModules, privateKey, publicKey) {
+  const names = args.plugin ? String(args.plugin).split(',') : Object.keys(config.plugins);
+  const index = readPluginIndex(out, platform, runtimeVersion) || { plugins: {} };
+  let changed = false;
+  for (const name of names) {
+    if (!config.plugins[name]) throw new Error(`No plugin "${name}" in the app's "plugins"`);
+    const built = bundlePlugin(config, platform, name, dir, hostModules);
+    const bundleHash = saveFile(out, fs.readFileSync(built.bundle));
+    const builds = index.plugins[name] || [];
+    if (builds[0] && builds[0].bundle === bundleHash && JSON.stringify(builds[0].modules) === JSON.stringify(built.modules)) {
+      console.log(`  ${name}: unchanged`);
+      continue;
+    }
+    const build = { id: Date.now(), createdAt: new Date().toISOString(), bundle: bundleHash, entry: built.entry, modules: built.modules, bundled: built.bundled };
+    index.plugins[name] = [build, ...builds].slice(0, PLUGIN_BUILDS);
+    changed = true;
+    console.log(`  ${name}: build ${build.id} (${built.bundled.length} modules of its own, ${Object.keys(built.modules).length - built.bundled.length} of the app's)`);
+  }
+  if (!changed) return;
+  const manifest = { app: config.id, platform, runtimeVersion, id: Math.max(Date.now(), (index.id || 0) + 1), plugins: index.plugins };
+  const file = path.join(out, platform, runtimeVersion, 'plugins.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, signManifest(manifest, privateKey, publicKey));
+  console.log(`${platform} ${runtimeVersion}: plugins ${manifest.id} → ${file}`);
+}
+
 function publish(config, args) {
   const updates = requireUpdates(config);
   // Its values are built into the bundle (env.babel.plugin.js): a developer's own, not every phone's
@@ -238,6 +303,8 @@ function publish(config, args) {
         hash: saveFile(out, fs.readFileSync(file)),
       }));
       const runtimeVersion = versions[platform];
+      if (config.plugins) publishPlugins(config, args, out, platform, runtimeVersion, tmp, built.modules, privateKey, updates.publicKey);
+      if (args['plugins-only']) continue;
       write(out, {
         app: config.id,
         platform,
@@ -283,6 +350,10 @@ function list(config, args) {
       const what = m.embedded ? 'the built-in bundle' : m.rolledBackTo ? `again ${m.rolledBackTo}` : m.bundle.slice(0, 12);
       console.log(`  ${m.id}  ${m.createdAt}  ${what}${m.message ? `  ${m.message}` : ''}`);
     }
+    const index = readPluginIndex(out, platform, runtimeVersion);
+    for (const [name, builds] of Object.entries(index ? index.plugins : {})) {
+      console.log(`  plugin ${name}: ${builds.map((b) => `${b.id} (${b.bundle.slice(0, 12)})`).join(', ')}`);
+    }
   }
 }
 
@@ -303,6 +374,7 @@ function run(config, argv) {
   keygen [--key <file>] [--force]                  a signing key; prints the public key for "updates.publicKey"
   fingerprint                                      the runtime version of each platform's build
   publish [--platform ios,android] [--message <text>] [--out <dir>] [--key <file>] [--allow-local-env]
+          [--plugins-only] [--plugin a,b]           the app and its plugins (or only the plugins: all, or some)
   rollback [--platform ...] [--to <id>] [--out <dir>]   an earlier update again, or (without --to) the built-in bundle
   list [--platform ...] [--out <dir>]`);
     process.exit(command ? 1 : 0);

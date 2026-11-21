@@ -238,6 +238,63 @@ class UpdatesStore private constructor(context: Context) {
     return mapOf("status" to "downloaded", "id" to id, "embedded" to embedded, "message" to message)
   }
 
+  // Plugins
+
+  /** Downloaded plugin bundles, by SHA-256. */
+  val pluginsDir get() = File(root, "plugins")
+
+  /** A signed index's manifest, if it's the publisher's and for this build. */
+  private fun pluginManifest(signed: String): JSONObject? = try {
+    val outer = JSONObject(signed)
+    val text = outer.getString("manifest")
+    val manifest = JSONObject(text)
+    if (verify(text.toByteArray(), Base64.decode(outer.getString("signature"), Base64.DEFAULT)) &&
+      manifest.optString("platform") == PLATFORM && manifest.optString("runtimeVersion") == runtimeVersion
+    ) manifest else null
+  } catch (e: Exception) {
+    null
+  }
+
+  /**
+   * The plugin index's manifest (text): fetched when it's newer than the one
+   * saved (which is kept, for launches offline), else the saved one; null if neither.
+   */
+  fun pluginIndex(): String? {
+    if (!enabled) return null
+    synchronized(this) { state }
+    val saved = File(root, "plugins.json")
+    val savedManifest = if (saved.exists()) pluginManifest(saved.readText()) else null
+    val fetched = try {
+      get("$baseUrl$PLATFORM/$runtimeVersion/plugins.json")?.let { String(it) }
+    } catch (e: IOException) {
+      null
+    }
+    val fetchedManifest = fetched?.let { pluginManifest(it) ?: throw IOException("The plugin index's signature doesn't match the app's key") }
+    if (fetchedManifest != null && fetchedManifest.optLong("id") > (savedManifest?.optLong("id") ?: -1)) {
+      root.mkdirs()
+      val tmp = File(root, "plugins.json.tmp")
+      tmp.writeText(fetched)
+      tmp.renameTo(saved)
+      return fetchedManifest.toString()
+    }
+    return savedManifest?.toString()
+  }
+
+  /** Downloads a plugin's bundle (named in the signed index by its SHA-256), unless it's here. */
+  fun fetchPlugin(hash: String) {
+    if (!enabled) throw IOException("Plugins load from the development server in debug builds")
+    if (!Regex("^[0-9a-f]{64}$").matches(hash)) throw IOException("Not a plugin's hash: $hash")
+    synchronized(this) { state }
+    val file = File(pluginsDir, hash)
+    if (file.exists()) return
+    val content = get("${baseUrl}files/$hash")
+    if (content == null || sha256(content) != hash) throw IOException("The plugin $hash didn't download")
+    pluginsDir.mkdirs()
+    val tmp = File(pluginsDir, "$hash.download")
+    tmp.writeBytes(content)
+    if (!tmp.renameTo(file)) throw IOException("The plugin $hash couldn't be saved")
+  }
+
   /** ECDSA P-256 with SHA-256, the signature in DER; the key is SPKI. */
   private fun verify(message: ByteArray, signature: ByteArray): Boolean = try {
     val key = KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(publicKey))

@@ -19,6 +19,13 @@ NS_ASSUME_NONNULL_BEGIN
 /** Looks for an update and downloads it (blocking: call it off the main thread). */
 - (NSDictionary *)check:(NSError **)error;
 
+/** Downloaded plugin bundles, by SHA-256. */
+@property(nonatomic, readonly) NSString *pluginsDir;
+/** The plugin index's manifest (JSON text): fetched if newer than the one saved, else that one (blocking). */
+- (nullable NSString *)pluginIndex:(NSError **)error;
+/** Downloads a plugin's bundle by its SHA-256, unless it's here (blocking). */
+- (BOOL)fetchPlugin:(NSString *)hash error:(NSError **)error;
+
 @end
 
 NS_ASSUME_NONNULL_END

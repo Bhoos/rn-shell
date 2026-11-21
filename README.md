@@ -61,3 +61,23 @@ change that needs a native one waits for a new build.
 - `rn-shell updates list`: what was published for the current runtime version.
 
 An app can ask what runs: `import { info, check } from 'rn-shell-updates'`.
+
+### Plugins (code splitting)
+Parts of an app can be bundles of their own, downloaded when the app loads them:
+```json
+"rn-shell": { "plugins": { "orders": "src/plugins/orders.tsx" } }
+```
+```ts
+import { loadPlugin } from 'rn-shell-updates';
+const orders = await loadPlugin<OrdersPlugin>('orders'); // the entry's default export
+```
+Module ids don't change between builds (`scripts/plugins/moduleIds.js`), so a plugin
+bundle carries only its own modules and uses the app's (React, React Native, the app's
+libraries). The app's release bundle lists a hash of each of its modules
+(`scripts/plugins/serializer.js`); a plugin loads only if the app modules it uses are the
+ones it was built with. `rn-shell updates publish` builds the plugins too (or alone:
+`--plugins-only`, `--plugin a,b`) into a signed `<platform>/<runtimeVersion>/plugins.json`
+that keeps each plugin's last 5 builds: the newest that fits loads. The bundle runs in the
+app's runtime (`global.__rnShellLoadPlugin`, JSI, `native/updates/cpp`), with everything
+the app can reach: plugins are the app's own code, signed with its key. Debug builds load
+plugins from Metro. A plugin's images aren't published: keep them in the app.

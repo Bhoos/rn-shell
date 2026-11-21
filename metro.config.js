@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const { getDefaultConfig } = require('@react-native/metro-config');
+const { createModuleIdFactory } = require('./scripts/plugins/moduleIds.js');
+const { customSerializer } = require('./scripts/plugins/serializer.js');
 
 const runTimeConfig = JSON.parse(fs.readFileSync('./.runtime.config.json'));
 // /**
@@ -61,6 +63,13 @@ const config = {
       // Point to the project root to load the main App component
       '@@app': applicationRoot,
     },
+  },
+  serializer: {
+    ...defaultConfig.serializer,
+    // Plugins (scripts/plugins): ids that don't change between builds, and
+    // the app's bundle saying which modules it has
+    createModuleIdFactory: createModuleIdFactory({ workspace: workspaceRoot, app: applicationRoot, shell: shellRoot }),
+    customSerializer,
   },
   transformer: {
     ...defaultConfig.transformer,

@@ -5,7 +5,12 @@ import { AppState, Linking } from 'react-native';
 import BootSplash from 'react-native-bootsplash';
 import * as Updates from 'rn-shell-updates';
 
-import {deepLink} from './.runtime.config.json';
+import runtimeConfig from './.runtime.config.json';
+
+const { deepLink } = runtimeConfig;
+
+// Plugins (rn-shell-updates): which there are, and where the app is (development loads them from Metro)
+Updates.configurePlugins(runtimeConfig);
 
 
 export function ShellApp() {

@@ -8,6 +8,10 @@ export interface Spec extends TurboModule {
   check(): Promise<Object>;
   /** The running bundle rendered: a new update is kept (until then, the next launch goes back to the one before). */
   ready(): void;
+  /** The plugin index's manifest (JSON), fetched, else the one saved; null without one. */
+  pluginIndex(): Promise<string | null>;
+  /** Downloads a plugin's bundle by its SHA-256 (kept for later launches); then global.__rnShellLoadPlugin(hash) runs it. */
+  fetchPlugin(hash: string): Promise<void>;
 }
 
 export default TurboModuleRegistry.get<Spec>("RNShellUpdates");
