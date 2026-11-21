@@ -52,6 +52,14 @@ const buildConfig = {
   appAttest: options.appAttest,
 
   kiosk: normalizeKiosk(options.kiosk),
+
+  // Over the air updates (scripts/updates.js): { url, publicKey, out?, runtimeVersion? }
+  updates: options.updates,
+}
+
+// The builds an update can run on, per platform (scripts/updates.js)
+if (buildConfig.updates) {
+  buildConfig.runtimeVersion = require('./scripts/updates.js').runtimeVersions(buildConfig.updates);
 }
 
 // `kiosk: true` enables everything, an object can opt out of individual features
@@ -145,6 +153,12 @@ ${entries.join('\n')}
 
 // Generate runtime config file to be used within build scripts
 fs.writeFileSync('.runtime.config.json', JSON.stringify(buildConfig, undefined, 2));
+
+// `rn-shell updates ...`: over the air updates (no icons, splash or native build needed)
+if (process.argv[2] === 'updates') {
+  require('./scripts/updates.js').run(buildConfig, process.argv.slice(3));
+  process.exit(0);
+}
 
 
 // Create app icon set

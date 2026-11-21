@@ -15,7 +15,8 @@
     "react-native-quick-base64": "^3.0.2",
     "react-native-quick-crypto": "1.1.10",
     "rn-shell-code-scanner": "file:./native/code-scanner",
-    "rn-shell-secure-keys": "file:./native/secure-keys"
+    "rn-shell-secure-keys": "file:./native/secure-keys",
+    "rn-shell-updates": "file:./native/updates"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

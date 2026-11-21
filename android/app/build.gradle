@@ -88,6 +88,8 @@ if (runTimeConfig.exists()) {
   config.universalLink = (universalLink instanceof Map ? universalLink.domain : universalLink) ?: ''
   config.permissions = runTime.permissions ?: [:]
   config.kiosk = runTime.kiosk ?: [:]
+  config.updates = runTime.updates ?: [:]
+  config.runtimeVersion = runTime.runtimeVersion?.android ?: ''
 }
 
 println "Runtime Configuration"
@@ -161,6 +163,13 @@ android {
         // Kiosk mode, applied in MainActivity
         buildConfigField "boolean", "KIOSK_FULL_SCREEN", String.valueOf(config.kiosk?.fullScreen == true)
         buildConfigField "boolean", "KIOSK_KEEP_AWAKE", String.valueOf(config.kiosk?.keepAwake == true)
+
+        // Over the air updates (native/updates): where, the publisher's key, the builds
+        // an update can run on, and when this one was made (older updates are skipped)
+        resValue "string", "rn_shell_updates_url", config.updates?.url ?: ''
+        resValue "string", "rn_shell_updates_key", config.updates?.publicKey ?: ''
+        resValue "string", "rn_shell_runtime_version", config.runtimeVersion ?: ''
+        resValue "string", "rn_shell_embedded_id", String.valueOf(System.currentTimeMillis())
 
         applicationId config.id
         minSdkVersion rootProject.ext.minSdkVersion

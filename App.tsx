@@ -1,8 +1,9 @@
 // @ts-ignore
 import App from '@@app';
 import { useEffect, useState } from 'react';
-import { Linking } from 'react-native';
+import { AppState, Linking } from 'react-native';
 import BootSplash from 'react-native-bootsplash';
+import * as Updates from 'rn-shell-updates';
 
 import {deepLink} from './.runtime.config.json';
 
@@ -43,6 +44,27 @@ export function ShellApp() {
       subscription.remove();
     }
   }, []);
+
+  // Over the air updates: the app rendered, so a new update is kept; then look
+  // for a newer one (at launch, and back in the foreground at most every 15
+  // minutes), started on the next launch
+  useEffect(() => {
+    if (path === null) return;
+    Updates.ready();
+    let last = 0;
+    function check() {
+      if (Date.now() - last < 15 * 60_000) return;
+      last = Date.now();
+      Updates.check().then((result) => {
+        if (result.status === 'downloaded' || result.status === 'failed') console.log('[updates]', result);
+      });
+    }
+    check();
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') check();
+    });
+    return () => subscription.remove();
+  }, [path !== null]);
 
   if (path === null) return null;
   return <App path={path}  />

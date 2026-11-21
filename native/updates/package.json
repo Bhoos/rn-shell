@@ -1,0 +1,17 @@
+{
+  "name": "rn-shell-updates",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Over the air updates: signed JS bundles (and their assets) downloaded from a static host, started on the next launch, rolled back when one never renders",
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "source": "src/index.ts",
+  "codegenConfig": {
+    "name": "RNShellUpdatesSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.reactnativeshell.updates"
+    }
+  }
+}

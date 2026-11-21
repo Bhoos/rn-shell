@@ -41,6 +41,9 @@ importers:
       rn-shell-secure-keys:
         specifier: file:./native/secure-keys
         version: file:native/secure-keys
+      rn-shell-updates:
+        specifier: file:./native/updates
+        version: file:native/updates
     devDependencies:
       '@babel/core':
         specifier: ^7.25.2
@@ -3523,6 +3526,9 @@ packages:
 
   rn-shell-secure-keys@file:native/secure-keys:
     resolution: {directory: native/secure-keys, type: directory}
+
+  rn-shell-updates@file:native/updates:
+    resolution: {directory: native/updates, type: directory}
 
   run-parallel@1.2.0:
     resolution: {integrity: sha512-5l4VyZR86LZ/lDxZTR6jqL8AFE2S0IFLMP26AbjsLVADxHdhB/c0GUsH+y39UfCi3dzz8OlQuPmnaJOMoDHQBA==}
@@ -8499,6 +8505,8 @@ snapshots:
   rn-shell-code-scanner@file:native/code-scanner: {}
 
   rn-shell-secure-keys@file:native/secure-keys: {}
+
+  rn-shell-updates@file:native/updates: {}
 
   run-parallel@1.2.0:
     dependencies:

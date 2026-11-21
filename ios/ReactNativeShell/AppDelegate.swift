@@ -6,6 +6,9 @@ import ReactAppDependencyProvider
 // Splash screen library (react-native-bootsplash)
 import RNBootSplash
 
+// Over the air updates (native/updates)
+import RNShellUpdates
+
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
   var reactNativeDelegate: ReactNativeDelegate?
@@ -93,7 +96,8 @@ class ReactNativeDelegate: RCTDefaultReactNativeFactoryDelegate {
 #if DEBUG
     RCTBundleURLProvider.sharedSettings().jsBundleURL(forBundleRoot: "index")
 #else
-    Bundle.main.url(forResource: "main", withExtension: "jsbundle")
+    // A downloaded update for this build, else the one it was built with
+    RNShellUpdatesLauncher.bundleURL() ?? Bundle.main.url(forResource: "main", withExtension: "jsbundle")
 #endif
   }
 

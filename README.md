@@ -15,3 +15,49 @@ A shell for developing and building React Native apps.
 3. Use `rn-shell` as a direct replacement for `react-native` commands. Ex: `rn-shell run`
    in your application folder.
 4. Export a default `App` component from the application main.
+
+### Over the air updates
+`native/updates` (`rn-shell-updates`) lets a release build start a newer JavaScript
+bundle (and its assets) than the one it was built with, downloaded from any static
+host. Like CodePush, but just files: no service to run.
+
+1. `rn-shell updates keygen` makes a signing key (`~/.rn-shell/updates/<id>.pem`) and
+   prints its public key.
+2. Configure the app:
+   ```json
+   "rn-shell": {
+     "updates": {
+       "url": "https://example.com/updates/com.example.app",
+       "publicKey": "MFkwEwYH...",
+       "out": ".updates"
+     }
+   }
+   ```
+3. Build and ship the app as usual: the build carries the URL, the key, its runtime
+   version and when it was made.
+4. `rn-shell updates publish [--platform ios,android] [--message "..."]` bundles the app
+   as a release build does (Hermes bytecode) and writes a static tree to `out`; serve
+   it at `url` as is (rsync, S3, nginx...).
+
+Publishing writes `files/<sha256>` (bundles and assets, by content) and
+`<platform>/<runtimeVersion>/latest.json` (and `<id>.json`, every one published). Each
+is a manifest signed with the key (ECDSA P-256): the app takes nothing its key didn't
+sign, nothing for another runtime version, and nothing older than its own build or
+its last update.
+
+On the phone: the shell's `App.tsx` calls `check()` at launch and back in the
+foreground (at most every 15 minutes); a newer update downloads and starts on the next
+launch. After it renders the shell calls `ready()`; if it never does (it crashed or was
+killed first), the next launch goes back to the update before it (or the built-in
+bundle) and never takes that one again. Debug builds always use Metro.
+
+The runtime version says which builds can run an update: a hash of what's native per
+platform (the shell's dependencies as installed, `native/*`, the iOS or Android
+project; `rn-shell updates fingerprint`), or the app's `updates.runtimeVersion`. A JS
+change that needs a native one waits for a new build.
+
+- `rn-shell updates rollback [--to <id>]`: publishes an earlier update again, or
+  (without `--to`) the built-in bundle, as a new id.
+- `rn-shell updates list`: what was published for the current runtime version.
+
+An app can ask what runs: `import { info, check } from 'rn-shell-updates'`.
