@@ -16,7 +16,28 @@ const toSnakeCase = str => {
 
 // Create a run time config from the current working directory
 const pkg = JSON.parse(fs.readFileSync(path.resolve('./package.json')));
-const options = pkg["rn-shell"];
+if (!pkg["rn-shell"]) {
+  console.error('Missing "rn-shell" configuration in package.json (requires at least "name" and "id")');
+  process.exit(1);
+}
+
+// A variant of the app (`--variant <name>`, or RN_SHELL_VARIANT): its "variants" entry
+// over the rest, e.g. a development build with its own id that loads its JavaScript
+// from Metro or a release server ("sources"). The flag isn't passed on to react-native.
+const variant = (() => {
+  const i = process.argv.indexOf('--variant');
+  if (i < 0) return process.env.RN_SHELL_VARIANT || null;
+  const name = process.argv[i + 1];
+  process.argv.splice(i, 2);
+  return name;
+})();
+const { variants, ...base } = pkg["rn-shell"];
+if (variant && !(variants && variants[variant])) {
+  console.error(`No variant "${variant}" in "rn-shell"'s "variants" (${Object.keys(variants || {}).join(', ') || 'none'})`);
+  process.exit(1);
+}
+const options = variant ? { ...base, ...variants[variant] } : base;
+if (variant) console.log(`Variant ${variant}: ${options.id}`);
 
 const buildConfig = {
   name: pkg.name,
@@ -30,7 +51,7 @@ const buildConfig = {
   id: options.id,
   buildNumber: options.buildNumber || 1,
 
-  appIcon: path.resolve(process.cwd(), options.appIcon),
+  appIcon: options.appIcon && path.resolve(process.cwd(), options.appIcon),
 
   splashIconSize: options.splashIconSize,
   splashIcon: options.splashIcon,
@@ -41,30 +62,63 @@ const buildConfig = {
 
   deepLink: options.deepLink,
   universalLink: options.universalLink,
+
+  permissions: options.permissions,
+
+  // App Attest (iOS): the entitlement's environment, "development" or "production", for
+  // an app that asks for it ("appAttest": true, or the environment); APP_ATTEST overrides
+  // it per build, and true is "production"
+  appAttest: options.appAttest && (process.env.APP_ATTEST || (options.appAttest === true ? 'production' : options.appAttest)),
+
+  kiosk: normalizeKiosk(options.kiosk),
+
+  // Over the air updates (scripts/updates.js): { url, publicKey, out?, runtimeVersion? }
+  updates: options.updates,
+
+  // Plugins (scripts/updates.js, native/updates): { name: entry file, relative to the app }
+  plugins: options.plugins,
+
+  // The variant built (--variant), and whether its release build chooses where its
+  // JavaScript comes from at runtime: Metro, or a release server's updates (native/updates)
+  variant,
+  sources: Boolean(options.sources),
+}
+
+// The builds an update can run on, per platform (scripts/updates.js)
+if (buildConfig.updates) {
+  buildConfig.runtimeVersion = require('./scripts/updates.js').runtimeVersions(buildConfig.updates);
+}
+
+// `kiosk: true` enables everything, an object can opt out of individual features
+function normalizeKiosk(kiosk) {
+  if (!kiosk) return undefined;
+  const defaults = { fullScreen: true, keepAwake: true };
+  if (kiosk === true) return defaults;
+  return Object.assign(defaults, kiosk);
 }
 
 // Configuration Override
-const config = pkg["rn-shell"];
-if (config) {
-  if (config.workspace) {
-    buildConfig.workspaceRoot = path.resolve(config.workspace);
-  }
+const config = options;
+if (config.workspace) {
+  buildConfig.workspaceRoot = path.resolve(config.workspace);
 }
 
 const srcAssetsFolder = path.resolve('assets');
 const destAssetsFolder = path.resolve(__dirname, "assets");
 
-const srcAssets = fs.lstatSync(srcAssetsFolder);
-if (srcAssets.isDirectory()) {
-  // remove everything from the directoy first
-  if (fs.existsSync(destAssetsFolder)) {
-    const items = fs.readdirSync(destAssetsFolder);
-    items.forEach(item => {
-      if (item.startsWith(".")) return;
-      fs.rmSync(path.join(destAssetsFolder, item), { recursive: true, force: true });
-    });
-  }
+// Remove the assets of any previously run application first
+if (fs.existsSync(destAssetsFolder)) {
+  const items = fs.readdirSync(destAssetsFolder);
+  items.forEach(item => {
+    if (item.startsWith(".")) return;
+    fs.rmSync(path.join(destAssetsFolder, item), { recursive: true, force: true });
+  });
+} else {
+  fs.mkdirSync(destAssetsFolder);
+}
 
+// The assets folder is optional for an application
+if (fs.existsSync(srcAssetsFolder) && fs.statSync(srcAssetsFolder).isDirectory()) {
   const files = fs.readdirSync(srcAssetsFolder);
   files.forEach((file) => {
     // Ignore all hidden files
@@ -86,11 +140,12 @@ ENV_APP_DISPLAY_NAME=${buildConfig.displayName}
 ENV_APP_MODULE_NAME=${buildConfig.moduleName}
 ENV_APP_MARKETING_VERSION=${buildConfig.version}
 ENV_APP_BUILD_VERSION=${buildConfig.buildNumber}
-`);
+${buildConfig.appleTeam ? `// Signing (the app's "appleTeam")\nDEVELOPMENT_TEAM=${buildConfig.appleTeam}\n` : ''}`);
 
 // Create symbolic link to assets folder for android
 const androidAssets = path.resolve('android/app/src/main/assets');
-if (fs.existsSync(androidAssets)) {
+// lstat instead of exists, so that a dangling symlink is removed as well
+if (fs.lstatSync(androidAssets, { throwIfNoEntry: false })) {
   console.log('Remove existing android assets');
   // Remove existing folder (rm -rf ...)
   fs.rmSync(androidAssets, { recursive: true, force: true });
@@ -98,8 +153,37 @@ if (fs.existsSync(androidAssets)) {
 fs.symlinkSync(destAssetsFolder, androidAssets);
 
 
+// The app's iOS entitlements: universal links (associated domains) and App Attest
+{
+  const entries = [];
+  if (buildConfig.universalLink) {
+    const domain = typeof buildConfig.universalLink === 'string' ? buildConfig.universalLink : buildConfig.universalLink.domain;
+    entries.push(`\t<key>com.apple.developer.associated-domains</key>\n\t<array>\n\t\t<string>applinks:${domain}</string>\n\t</array>`);
+  }
+  if (buildConfig.appAttest) {
+    if (!['development', 'production'].includes(buildConfig.appAttest)) {
+      throw new Error(`"appAttest" (or APP_ATTEST) is "development" or "production", not "${buildConfig.appAttest}"`);
+    }
+    entries.push(`\t<key>com.apple.developer.devicecheck.appattest-environment</key>\n\t<string>${buildConfig.appAttest}</string>`);
+  }
+  fs.writeFileSync('ios/ReactNativeShell/ReactNativeShell.entitlements', `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+${entries.join('\n')}
+</dict>
+</plist>
+`);
+}
+
 // Generate runtime config file to be used within build scripts
 fs.writeFileSync('.runtime.config.json', JSON.stringify(buildConfig, undefined, 2));
+
+// `rn-shell updates ...`: over the air updates (no icons, splash or native build needed)
+if (process.argv[2] === 'updates') {
+  require('./scripts/updates.js').run(buildConfig, process.argv.slice(3));
+  process.exit(0);
+}
 
 
 // Create app icon set
@@ -139,7 +223,7 @@ if (config.universalLink) {
       apps: [],
       details: [{
         appIDs: [`${config.appleTeam}.${config.id}`],
-        paths: [info.paths ? info.paths : "*"],
+        paths: info.paths || ["*"],
         components: info.paths ? info.paths.map(p => {
           if (p.startsWith("NOT")) {
             return {
@@ -187,8 +271,9 @@ if (config.universalLink) {
 
 
 // In case of a run-android command override the appId
-const cmd = process.argv[2];
-if (cmd.includes('android')) {
+const cmd = process.argv[2] || '';
+if (cmd === 'run-android') {
+  // (build-android doesn't take it)
   process.argv.push('--appId');
   process.argv.push(buildConfig.id);
 } else if (cmd.includes('ios')) {

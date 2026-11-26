@@ -1,0 +1,12 @@
+{
+  "name": "crsqlite-native",
+  "version": "0.22.2",
+  "files": [
+    "android",
+    "ios",
+    "crsqlite.podspec",
+    "react-native.config.js"
+  ],
+  "description": "cr-sqlite (a build from the bhoos/cr-sqlite fork), as an SQLite extension for iOS and Android: load it with op-sqlite (`loadExtension`, entry point `sqlite3_crsqlite_init`)",
+  "private": true
+}

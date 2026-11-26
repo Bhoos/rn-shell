@@ -1,0 +1,63 @@
+buildscript {
+  repositories {
+    google()
+    mavenCentral()
+  }
+}
+
+def safeExtGet(prop, fallback) {
+  return rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
+}
+
+apply plugin: 'com.android.library'
+// AGP 9 provides Kotlin itself; older AGP versions still need the plugin.
+if (project.extensions.findByName('kotlin') == null) {
+  apply plugin: 'kotlin-android'
+}
+apply plugin: 'com.facebook.react'
+
+android {
+  namespace = "com.reactnativeshell.updates"
+  compileSdkVersion safeExtGet('compileSdkVersion', 36)
+
+  defaultConfig {
+    minSdkVersion safeExtGet('minSdkVersion', 24)
+    targetSdkVersion safeExtGet('targetSdkVersion', 36)
+    externalNativeBuild {
+      cmake {
+        arguments "-DANDROID_STL=c++_shared"
+      }
+    }
+  }
+
+  // The plugin loader (C++, ../cpp): JSI bindings of the module
+  ndkVersion safeExtGet('ndkVersion', null)
+  externalNativeBuild {
+    cmake {
+      path "CMakeLists.txt"
+    }
+  }
+  buildFeatures {
+    prefab true
+  }
+  packaging {
+    jniLibs {
+      // React Native's own, packaged by the app
+      excludes += ["**/libreactnative.so", "**/libjsi.so", "**/libfbjni.so", "**/libc++_shared.so"]
+    }
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+}
+
+repositories {
+  mavenCentral()
+  google()
+}
+
+dependencies {
+  implementation 'com.facebook.react:react-android'
+}

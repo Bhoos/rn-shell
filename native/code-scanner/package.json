@@ -1,0 +1,17 @@
+{
+  "name": "rn-shell-code-scanner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Scan a QR code with the camera, in a screen the platform shows (iOS: AVFoundation; Android: Google's code scanner, no camera permission needed)",
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "source": "src/index.ts",
+  "codegenConfig": {
+    "name": "RNShellCodeScannerSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.reactnativeshell.codescanner"
+    }
+  }
+}

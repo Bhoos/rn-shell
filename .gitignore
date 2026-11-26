@@ -100,3 +100,6 @@ android/app/src/main/res/*/bootsplash_logo.png
 ios/ReactNativeShell/Colors.xcassets/BootSplashBackground-*.colorset
 ios/ReactNativeShell/Images.xcassets/BootSplashLogo-*.imageset
 ios/ReactNativeShell/BootSplash.storyboard
+
+# Generated per app by the cli (universal links, App Attest)
+ios/ReactNativeShell/ReactNativeShell.entitlements
