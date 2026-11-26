@@ -65,8 +65,10 @@ const buildConfig = {
 
   permissions: options.permissions,
 
-  // App Attest (iOS): "development" or "production", the entitlement's environment
-  appAttest: options.appAttest,
+  // App Attest (iOS): the entitlement's environment, "development" or "production", for
+  // an app that asks for it ("appAttest": true, or the environment); APP_ATTEST overrides
+  // it per build, and true is "production"
+  appAttest: options.appAttest && (process.env.APP_ATTEST || (options.appAttest === true ? 'production' : options.appAttest)),
 
   kiosk: normalizeKiosk(options.kiosk),
 
@@ -160,7 +162,7 @@ fs.symlinkSync(destAssetsFolder, androidAssets);
   }
   if (buildConfig.appAttest) {
     if (!['development', 'production'].includes(buildConfig.appAttest)) {
-      throw new Error(`"appAttest" is "development" or "production", not "${buildConfig.appAttest}"`);
+      throw new Error(`"appAttest" (or APP_ATTEST) is "development" or "production", not "${buildConfig.appAttest}"`);
     }
     entries.push(`\t<key>com.apple.developer.devicecheck.appattest-environment</key>\n\t<string>${buildConfig.appAttest}</string>`);
   }
