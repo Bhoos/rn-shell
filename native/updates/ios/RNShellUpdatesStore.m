@@ -1,4 +1,5 @@
 #import "RNShellUpdatesStore.h"
+#import "RNShellSource.h"
 #import <CommonCrypto/CommonDigest.h>
 #import <Security/Security.h>
 
@@ -9,6 +10,7 @@ static NSString *const kErrorDomain = @"RNShellUpdates";
 /*
  * state.json:
  *   binary, runtimeVersion  the build the updates below were downloaded for
+ *   url       the server they came from (another one, chosen with RNShellSource, starts over)
  *   current   { id, message, status: new | launching | ok }: the update that runs
  *   previous  { id, message }: the last one that rendered, kept until current does
  *   pending   { id, message, embedded }: downloaded, started on the next launch
@@ -20,6 +22,8 @@ static NSString *const kErrorDomain = @"RNShellUpdates";
 @implementation RNShellUpdatesStore {
   NSString *_root;
   NSURL *_baseURL;
+  NSString *_buildURL;
+  BOOL _launched;
   NSData *_publicKey;
   NSString *_runtimeVersion;
   NSString *_binary;
@@ -44,15 +48,38 @@ static NSString *const kErrorDomain = @"RNShellUpdates";
     // When the build was made: updates published before it are older than its own bundle
     _embeddedId = @([plist[@"RNShellEmbeddedId"] longLongValue]);
     _binary = [NSString stringWithFormat:@"%@ (%@) %@", plist[@"CFBundleShortVersionString"], plist[@"CFBundleVersion"], _embeddedId];
-    if (url.length > 0) {
-      _baseURL = [NSURL URLWithString:[url hasSuffix:@"/"] ? url : [url stringByAppendingString:@"/"]];
-    }
+    _buildURL = url ?: @"";
+    // A development build's release server, chosen in the app (RNShellSource), else the build's
+    [self setBase:(RNShellSource.enabled ? RNShellSource.releaseURL : nil) ?: url];
     if (key.length > 0) _publicKey = [[NSData alloc] initWithBase64EncodedString:key options:0];
     NSString *support = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES).firstObject;
     _root = [support stringByAppendingPathComponent:@"rn-shell-updates"];
     _checks = dispatch_queue_create("rn-shell-updates.check", DISPATCH_QUEUE_SERIAL);
   }
   return self;
+}
+
+- (void)setBase:(NSString *)url {
+  _baseURL = url.length > 0 ? [NSURL URLWithString:[url hasSuffix:@"/"] ? url : [url stringByAppendingString:@"/"]] : nil;
+}
+
+- (NSString *)buildURL {
+  return _buildURL;
+}
+
+- (NSString *)url {
+  @synchronized(self) {
+    return _baseURL.absoluteString ?: @"";
+  }
+}
+
+- (void)useURL:(NSString *)url {
+  @synchronized(self) {
+    [self setBase:url.length > 0 ? url : _buildURL];
+    // Loaded again: a different server's updates start over
+    _state = nil;
+    _launched = NO;
+  }
 }
 
 - (BOOL)enabled {
@@ -80,13 +107,15 @@ static NSString *const kErrorDomain = @"RNShellUpdates";
   if (_state) return _state;
   NSData *data = [NSData dataWithContentsOfFile:[_root stringByAppendingPathComponent:@"state.json"]];
   NSDictionary *saved = data ? [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingMutableContainers error:nil] : nil;
+  NSString *url = _baseURL.absoluteString ?: @"";
   if ([saved isKindOfClass:NSDictionary.class] && [saved[@"binary"] isEqual:_binary] &&
-      [saved[@"runtimeVersion"] isEqual:_runtimeVersion]) {
+      [saved[@"runtimeVersion"] isEqual:_runtimeVersion] && [(saved[@"url"] ?: url) isEqual:url]) {
     _state = [saved mutableCopy];
   } else {
     [NSFileManager.defaultManager removeItemAtPath:_root error:nil];
-    _state = [@{@"binary" : _binary, @"runtimeVersion" : _runtimeVersion, @"lastId" : _embeddedId, @"failed" : @[]} mutableCopy];
+    _state = [@{@"binary" : _binary, @"runtimeVersion" : _runtimeVersion, @"url" : url, @"lastId" : _embeddedId, @"failed" : @[]} mutableCopy];
   }
+  _state[@"url"] = url;
   return _state;
 }
 
@@ -104,6 +133,7 @@ static NSString *const kErrorDomain = @"RNShellUpdates";
 - (NSURL *)launch {
   if (!self.enabled) return nil;
   @synchronized(self) {
+    _launched = YES;
     NSMutableDictionary *state = self.state;
     NSDictionary *pending = state[@"pending"];
     if (pending) {
@@ -152,6 +182,8 @@ static NSString *const kErrorDomain = @"RNShellUpdates";
 - (void)ready {
   if (!self.enabled) return;
   @synchronized(self) {
+    // Only an update this process started (not while a Metro bundle runs: RNShellSource)
+    if (!_launched) return;
     NSMutableDictionary *state = self.state;
     NSMutableDictionary *current = [state[@"current"] mutableCopy];
     if (![current[@"status"] isEqual:@"launching"]) return;

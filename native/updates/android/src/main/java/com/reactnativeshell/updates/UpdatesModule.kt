@@ -3,7 +3,9 @@ package com.reactnativeshell.updates
 import com.facebook.proguard.annotations.DoNotStrip
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
+import com.facebook.react.ReactApplication
 import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.bridge.UiThreadUtil
 import com.facebook.react.turbomodule.core.interfaces.BindingsInstallerHolder
 import com.facebook.react.turbomodule.core.interfaces.TurboModuleWithJSIBindings
 import kotlin.concurrent.thread
@@ -35,6 +37,52 @@ class UpdatesModule(reactContext: ReactApplicationContext) : NativeUpdatesSpec(r
 
   override fun ready() {
     store.ready()
+    BundleSource.ready(reactApplicationContext)
+  }
+
+  override fun source(promise: Promise) {
+    val context = reactApplicationContext
+    if (!BundleSource.enabled(context)) {
+      promise.resolve(null)
+      return
+    }
+    val running = when {
+      BundleSource.runningMetro -> "metro"
+      store.info()["updateId"] != null -> "update"
+      else -> "embedded"
+    }
+    promise.resolve(Arguments.makeNativeMap(mapOf(
+      "kind" to BundleSource.kind(context),
+      "metroUrl" to (BundleSource.metroUrl(context) ?: ""),
+      "releaseUrl" to store.url,
+      "buildReleaseUrl" to store.buildUrl,
+      "running" to running,
+      "fallback" to BundleSource.fallback,
+    )))
+  }
+
+  override fun setSource(kind: String, url: String, promise: Promise) {
+    val context = reactApplicationContext
+    if (!BundleSource.enabled(context)) {
+      promise.reject("source", "This build loads its own bundle (no \"sources\")")
+      return
+    }
+    thread(name = "rn-shell-updates") {
+      BundleSource.set(context, kind, url)
+      if (kind != "metro") {
+        // The release server's latest, started by the reload below
+        store.useUrl(url)
+        try {
+          store.check()
+        } catch (_: Exception) {
+        }
+        UpdatesStore.relaunch()
+      }
+      promise.resolve(null)
+      UiThreadUtil.runOnUiThread {
+        (context.applicationContext as? ReactApplication)?.reactHost?.reload("rn-shell: the bundle's source changed")
+      }
+    }
   }
 
   override fun pluginIndex(promise: Promise) {

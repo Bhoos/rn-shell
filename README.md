@@ -62,6 +62,31 @@ change that needs a native one waits for a new build.
 
 An app can ask what runs: `import { info, check } from 'rn-shell-updates'`.
 
+### Variants and development builds
+An app can have variants: `"variants"` entries laid over the rest of its config, picked with
+`--variant <name>` (or `RN_SHELL_VARIANT`) on any command:
+```json
+"rn-shell": {
+  "id": "com.example.app",
+  "variants": { "dev": { "id": "com.example.dev", "name": "Example dev", "deepLink": "exampledev", "sources": true } }
+}
+```
+```sh
+rn-shell run-ios --variant dev --mode Release
+```
+`"sources": true` makes a release build that loads its JavaScript from where the app says
+(`native/updates`: `RNShellSource` on iOS, `BundleSource` on Android), kept on the device:
+```ts
+import { source, setSource } from 'rn-shell-updates';
+await source();                              // { kind, metroUrl, releaseUrl, buildReleaseUrl, running, fallback }, null without "sources"
+await setSource('metro', '192.168.1.5');     // Metro's bundle as a release build runs it (dev=false), port 8081 if none; then reloads
+await setSource('release', '');              // over the air updates from a server ("": the build's "updates.url"); then reloads
+```
+Metro is asked each launch and reload; when it doesn't answer, or the last bundle it served
+never rendered (`ready()`), the release source's bundle starts instead and `fallback` says why.
+Another release server's updates start over (its latest). Android builds with `"sources"` allow
+cleartext traffic (Metro is http). Debug builds always use Metro, as before.
+
 ### Plugins (code splitting)
 Parts of an app can be bundles of their own, downloaded when the app loads them:
 ```json

@@ -24,6 +24,7 @@ import java.security.spec.X509EncodedKeySpec
  * Updates live in files/rn-shell-updates, one directory each (the bundle and
  * its assets), with state.json:
  *   binary, runtimeVersion  the build the updates below were downloaded for
+ *   url       the server they came from (another one, chosen with BundleSource, starts over)
  *   current   { id, message, status: new | launching | ok }: the update that runs
  *   previous  { id, message }: the last one that rendered, kept until current does
  *   pending   { id, message, embedded }: downloaded, started on the next launch
@@ -33,7 +34,10 @@ import java.security.spec.X509EncodedKeySpec
  */
 class UpdatesStore private constructor(context: Context) {
   private val root = File(context.filesDir, "rn-shell-updates")
-  private val baseUrl: String?
+  @Volatile private var baseUrl: String?
+  /** The build's server (rn_shell_updates_url). */
+  val buildUrl: String
+  private var launched = false
   private val publicKey: ByteArray?
   private val runtimeVersion: String
   private val binary: String
@@ -49,7 +53,9 @@ class UpdatesStore private constructor(context: Context) {
     }
     val url = resource("rn_shell_updates_url")
     val key = resource("rn_shell_updates_key")
-    baseUrl = url.ifEmpty { null }?.let { if (it.endsWith("/")) it else "$it/" }
+    buildUrl = url
+    // A development build's release server, chosen in the app (BundleSource), else the build's
+    baseUrl = base((if (BundleSource.enabled(context)) BundleSource.releaseUrl(context) else null) ?: url)
     publicKey = key.ifEmpty { null }?.let { Base64.decode(it, Base64.DEFAULT) }
     runtimeVersion = resource("rn_shell_runtime_version")
     // When the build was made: updates published before it are older than its own bundle
@@ -58,6 +64,17 @@ class UpdatesStore private constructor(context: Context) {
     val info = context.packageManager.getPackageInfo(context.packageName, 0)
     @Suppress("DEPRECATION")
     binary = "${info.versionName} (${info.versionCode}) $embeddedId"
+  }
+
+  /** The server updates come from ("" for none). */
+  val url get() = baseUrl ?: ""
+
+  /** Takes updates from another server (empty: the build's); one that differs starts over. */
+  @Synchronized
+  fun useUrl(url: String?) {
+    baseUrl = base(url?.ifEmpty { null } ?: buildUrl)
+    loaded = null
+    launched = false
   }
 
   /** Updates are configured (an URL and a key) and this isn't a debuggable build. */
@@ -80,12 +97,15 @@ class UpdatesStore private constructor(context: Context) {
       } catch (e: Exception) {
         null
       }
-      val state = if (saved != null && saved.optString("binary") == binary && saved.optString("runtimeVersion") == runtimeVersion) {
+      val url = baseUrl ?: ""
+      val state = if (saved != null && saved.optString("binary") == binary && saved.optString("runtimeVersion") == runtimeVersion &&
+        saved.optString("url", url) == url) {
         saved
       } else {
         root.deleteRecursively()
         JSONObject().put("binary", binary).put("runtimeVersion", runtimeVersion).put("lastId", embeddedId).put("failed", JSONArray())
       }
+      state.put("url", url)
       loaded = state
       return state
     }
@@ -113,6 +133,7 @@ class UpdatesStore private constructor(context: Context) {
   @Synchronized
   fun launch(): String? {
     if (!enabled) return null
+    launched = true
     val state = state
     state.optJSONObject("pending")?.let { pending ->
       state.remove("pending")
@@ -152,6 +173,8 @@ class UpdatesStore private constructor(context: Context) {
   @Synchronized
   fun ready() {
     if (!enabled) return
+    // Only an update this process started (not while a Metro bundle runs: BundleSource)
+    if (!launched) return
     val current = state.optJSONObject("current") ?: return
     if (current.optString("status") != "launching") return
     current.put("status", "ok")
@@ -330,7 +353,7 @@ class UpdatesStore private constructor(context: Context) {
     private const val BUNDLE = "index.android.bundle"
 
     @Volatile private var instance: UpdatesStore? = null
-    private var launched: Result<String?>? = null
+    private var started: Result<String?>? = null
 
     fun get(context: Context): UpdatesStore =
       instance ?: synchronized(this) { instance ?: UpdatesStore(context.applicationContext).also { instance = it } }
@@ -340,16 +363,25 @@ class UpdatesStore private constructor(context: Context) {
     @Synchronized
     fun bundlePath(context: Context): String? {
       // Once per process: a second launch would take the update as one that didn't start
-      launched?.let { return it.getOrNull() }
+      started?.let { return it.getOrNull() }
       val path = try {
         get(context).launch()
       } catch (e: Exception) {
         Log.e(TAG, "couldn't read the updates", e)
         null
       }
-      launched = Result.success(path)
+      started = Result.success(path)
       return path
     }
+
+    /** The next bundlePath chooses the update again (another release server was chosen: BundleSource). */
+    @JvmStatic
+    @Synchronized
+    fun relaunch() {
+      started = null
+    }
+
+    private fun base(url: String?) = url?.ifEmpty { null }?.let { if (it.endsWith("/")) it else "$it/" }
 
     private fun safePath(path: String) =
       path.isNotEmpty() && !path.startsWith("/") && !path.contains('\\') &&

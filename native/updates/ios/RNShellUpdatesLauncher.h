@@ -13,11 +13,15 @@ NS_ASSUME_NONNULL_BEGIN
 @interface RNShellUpdatesLauncher : NSObject
 
 /**
- * The bundle to start: the downloaded update for this build, or nil for the
- * embedded one. Call once per launch: a new update is tried once, and if the
+ * The bundle to start: a development build's Metro bundle (RNShellSource),
+ * else the downloaded update for this build, or nil for the embedded one.
+ * The update is chosen once per process: a new one is tried once, and if the
  * app doesn't call `ready` on it, the next launch goes back to the one before.
  */
 + (nullable NSURL *)bundleURL;
+
+/** The next bundleURL chooses the update again (another release server was chosen: RNShellSource). */
++ (void)relaunch;
 
 @end
 

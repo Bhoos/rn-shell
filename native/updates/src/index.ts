@@ -41,3 +41,4 @@ export function ready(): void {
 }
 
 export { configurePlugins, loadPlugin, pluginIndex, pluginNames, type PluginBuild, type PluginIndex } from './plugins';
+export { metroUrl, setSource, source, type BundleSource } from './source';

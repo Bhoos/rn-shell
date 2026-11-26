@@ -16,11 +16,28 @@ const toSnakeCase = str => {
 
 // Create a run time config from the current working directory
 const pkg = JSON.parse(fs.readFileSync(path.resolve('./package.json')));
-const options = pkg["rn-shell"];
-if (!options) {
+if (!pkg["rn-shell"]) {
   console.error('Missing "rn-shell" configuration in package.json (requires at least "name" and "id")');
   process.exit(1);
 }
+
+// A variant of the app (`--variant <name>`, or RN_SHELL_VARIANT): its "variants" entry
+// over the rest, e.g. a development build with its own id that loads its JavaScript
+// from Metro or a release server ("sources"). The flag isn't passed on to react-native.
+const variant = (() => {
+  const i = process.argv.indexOf('--variant');
+  if (i < 0) return process.env.RN_SHELL_VARIANT || null;
+  const name = process.argv[i + 1];
+  process.argv.splice(i, 2);
+  return name;
+})();
+const { variants, ...base } = pkg["rn-shell"];
+if (variant && !(variants && variants[variant])) {
+  console.error(`No variant "${variant}" in "rn-shell"'s "variants" (${Object.keys(variants || {}).join(', ') || 'none'})`);
+  process.exit(1);
+}
+const options = variant ? { ...base, ...variants[variant] } : base;
+if (variant) console.log(`Variant ${variant}: ${options.id}`);
 
 const buildConfig = {
   name: pkg.name,
@@ -58,6 +75,11 @@ const buildConfig = {
 
   // Plugins (scripts/updates.js, native/updates): { name: entry file, relative to the app }
   plugins: options.plugins,
+
+  // The variant built (--variant), and whether its release build chooses where its
+  // JavaScript comes from at runtime: Metro, or a release server's updates (native/updates)
+  variant,
+  sources: Boolean(options.sources),
 }
 
 // The builds an update can run on, per platform (scripts/updates.js)
@@ -74,11 +96,9 @@ function normalizeKiosk(kiosk) {
 }
 
 // Configuration Override
-const config = pkg["rn-shell"];
-if (config) {
-  if (config.workspace) {
-    buildConfig.workspaceRoot = path.resolve(config.workspace);
-  }
+const config = options;
+if (config.workspace) {
+  buildConfig.workspaceRoot = path.resolve(config.workspace);
 }
 
 const srcAssetsFolder = path.resolve('assets');
@@ -250,7 +270,8 @@ if (config.universalLink) {
 
 // In case of a run-android command override the appId
 const cmd = process.argv[2] || '';
-if (cmd.includes('android')) {
+if (cmd === 'run-android') {
+  // (build-android doesn't take it)
   process.argv.push('--appId');
   process.argv.push(buildConfig.id);
 } else if (cmd.includes('ios')) {

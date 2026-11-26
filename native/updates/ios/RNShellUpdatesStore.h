@@ -10,6 +10,13 @@ NS_ASSUME_NONNULL_BEGIN
 /** Updates are configured (an URL and a key) and this isn't a debug build. */
 @property(nonatomic, readonly) BOOL enabled;
 
+/** The server updates come from ("" for none). */
+@property(nonatomic, readonly) NSString *url;
+/** The build's server (Info.plist RNShellUpdatesURL). */
+@property(nonatomic, readonly) NSString *buildURL;
+/** Takes updates from another server (empty: the build's); one that differs starts over. */
+- (void)useURL:(nullable NSString *)url;
+
 /** The bundle to start (see RNShellUpdatesLauncher). */
 - (nullable NSURL *)launch;
 /** The running bundle rendered. */

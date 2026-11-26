@@ -27,6 +27,10 @@ export function ShellApp() {
         }
       } else if (url.startsWith(`${deepLink}://`)) {
         return(url.substring(deepLink.length + 2));
+      } else if (/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) {
+        // Another of the app's schemes: a variant's ("deepLink" in "variants"), whose
+        // bundle may come from a Metro started for the app itself
+        return(url.substring(url.indexOf('://') + 2));
       } else {
         return null;
       }

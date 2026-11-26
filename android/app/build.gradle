@@ -90,6 +90,7 @@ if (runTimeConfig.exists()) {
   config.kiosk = runTime.kiosk ?: [:]
   config.updates = runTime.updates ?: [:]
   config.runtimeVersion = runTime.runtimeVersion?.android ?: ''
+  config.sources = runTime.sources ?: false
 }
 
 println "Runtime Configuration"
@@ -141,6 +142,16 @@ ${entries.join('\n')}
 generatePermissionsManifest()
 
 
+// A build with "sources" reaches Metro over http in release too (React Native's
+// plugin turns cleartext off for release builds; this runs after it)
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        if (config.sources == true) {
+            variant.manifestPlaceholders.put("usesCleartextTraffic", "true")
+        }
+    }
+}
+
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -170,6 +181,9 @@ android {
         resValue "string", "rn_shell_updates_key", config.updates?.publicKey ?: ''
         resValue "string", "rn_shell_runtime_version", config.runtimeVersion ?: ''
         resValue "string", "rn_shell_embedded_id", String.valueOf(System.currentTimeMillis())
+        // The app's "sources": a release build that loads its JavaScript from Metro or a
+        // release server, chosen in the app (native/updates' BundleSource)
+        resValue "bool", "rn_shell_sources", String.valueOf(config.sources == true)
 
         applicationId config.id
         minSdkVersion rootProject.ext.minSdkVersion
